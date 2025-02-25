@@ -114,6 +114,10 @@ class NetworkTrainer(object):
         self.log_file = None
         self.deterministic = deterministic
 
+        ################# For transfered Learning ########################################
+        self.frozen_until = 25 # epoch to unfreeze 
+        self.frozen = False # if the model is frozen or not
+
         self.use_progress_bar = False
         if 'nnunet_use_progress_bar' in os.environ.keys():
             self.use_progress_bar = bool(int(os.environ['nnunet_use_progress_bar']))
@@ -125,6 +129,33 @@ class NetworkTrainer(object):
         self.save_intermediate_checkpoints = True  # whether or not to save checkpoint_latest
         self.save_best_checkpoint = True  # whether or not to save the best checkpoint according to self.best_val_eval_criterion_MA
         self.save_final_checkpoint = True  # whether or not to save the final checkpoint
+
+
+    # freezing method 
+    def freeze(self): 
+        print(f"Freezing at epoch {self.epoch}")
+        final_layer_name = "seg_outputs"
+        for name, param in self.network.named_parameters():
+            if final_layer_name not in name:
+                param.requires_grad = False
+            else: 
+                param.requires_grad = True 
+
+        # print to check if the model is frozen
+        for name, param in self.network.named_parameters():
+            print(name, param.requires_grad)
+        
+        self.frozen = True
+
+    def unfreeze(self): 
+        print(f"Unfreezing at epoch {self.epoch}")
+        for name, param in self.network.named_parameters():
+            param.requires_grad = True
+
+        # print to check if the model is unfrozen
+        for name, param in self.network.named_parameters():
+            print(name, param.requires_grad)
+        self.frozen = False
 
     @abstractmethod
     def initialize(self, training=True):
@@ -438,6 +469,13 @@ class NetworkTrainer(object):
             self.print_to_log_file("\nepoch: ", self.epoch)
             epoch_start_time = time()
             train_losses_epoch = []
+
+
+            if self.epoch <= self.frozen_until and not self.frozen: 
+                self.freeze()
+            
+            elif self.epoch > self.frozen_until and self.frozen:
+                self.unfreeze()
 
             # train one epoch
             self.network.train()
